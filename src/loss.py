@@ -35,16 +35,3 @@ class balanced_loss(nn.Module):
         loss = multilabel_categorical_crossentropy(labels, logits)
         loss = loss.mean()
         return loss
-
-    def get_label(self, logits, num_labels=-1):
-        th_logit = torch.zeros_like(logits[..., :1])
-        output = torch.zeros_like(logits).to(logits)
-        mask = (logits > th_logit)
-        if num_labels > 0:
-            top_v, _ = torch.topk(logits, num_labels, dim=1)
-            top_v = top_v[:, -1]
-            mask = (logits >= top_v.unsqueeze(1)) & mask
-        output[mask] = 1.0
-        output[:, 0] = (output[:, 1:].sum(1) == 0.).to(logits)
-
-        return output
