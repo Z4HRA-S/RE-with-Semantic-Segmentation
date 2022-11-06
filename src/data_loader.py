@@ -107,14 +107,17 @@ class DocRED(Dataset):
 
         vertexSet = [[mnt["pos"] for mnt in ent] for ent in doc["vertexSet"]]
         entity_list = self.aggregate_entities(vertexSet, embedded_doc.last_hidden_state.squeeze())
+        labels = torch.zeros(42, 42, 97)
+        for triple in doc["labels"]:
+            i = triple["h"]
+            j = triple["t"]
+            k = self.rel2id[triple["r"]]
+            labels[i][j][k] = 1
+
         processed_doc = {
             "entity_list": entity_list,
             "embedded_doc": embedded_doc,
-            "label": [[triple["h"],
-                       triple["t"],
-                       self.rel2id[triple["r"]]]
-                      for triple in doc["labels"]
-                      ] + [[-1, -1, -1]] * (max_lbl - len(doc["labels"]))
+            "label": labels
         }
         return processed_doc
 
@@ -128,6 +131,8 @@ class DocRED(Dataset):
         _, embedding_size = embedded_doc.size()
         padded_result = torch.zeros(max_ent, embedding_size)
         mention_positions = [list(filter(lambda x: x[0] <= 512 and x[1] <= 512, ent)) for ent in vertexSet]
+        mention_positions = [list(filter(lambda x: len(x) > 0, mnt)) for mnt in mention_positions]
+        mention_positions = list(filter(lambda x: len(x) > 0, mention_positions))
         #  doc contains aggregated entity embedding, in shape(ent, 768)
         doc = [logsumexp(torch.concat([embedded_doc[pos[0]:pos[1]] for pos in mnt]))
                for mnt in mention_positions]
