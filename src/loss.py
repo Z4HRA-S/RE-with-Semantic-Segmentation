@@ -32,6 +32,18 @@ class balanced_loss(nn.Module):
         super().__init__()
 
     def forward(self, logits, labels):
+        f1 = self.f1(logits, labels)
         loss = multilabel_categorical_crossentropy(labels, logits)
         loss = loss.mean()
-        return loss
+        return loss, f1
+
+    def f1(self, logits, labels):
+        predicted = torch.zeros_like(logits)
+        predicted[logits > 0] = 1
+        tp = torch.sum(torch.logical_and(predicted, labels).float(), dim=1)
+        fn_fp = torch.sum(torch.logical_xor(predicted, labels).float(), dim=1)
+        epsilon = torch.zeros_like(tp) + 1e-10
+        f1 = tp / (tp + (fn_fp / 2) + epsilon)
+        f1 = f1.mean()
+        return f1
+
