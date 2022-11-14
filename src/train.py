@@ -20,7 +20,7 @@ def train_loop(dataloader, model, loss_fn, optimizer):
         optimizer.step()
 
         if batch % 100 == 0:
-            loss, current = loss.item(), batch * len(data)
+            loss, current = loss.item(), (batch + 1) * len(data)
             print(f"loss: {loss:>7f} f1: {f1:>7f}  [{current:>5d}/{size:>5d}]")
 
 
@@ -32,13 +32,13 @@ def test_loop(dataloader, model, loss_fn):
     with torch.no_grad():
         for data in dataloader:
             pred = model(data)
-            test_loss += loss_fn(pred, data["label"]).item()[0]
-            correct += (pred.argmax(1) == data["label"]).type(torch.float).sum().item()
+            loss, f1 = loss_fn(pred, data["label"])
 
-    test_loss /= num_batches
-    correct /= size
-    print(f"Test Error: \n Accuracy: {(100 * correct):>0.1f}%, Avg loss: {test_loss:>8f} \n")
+    loss /= num_batches
+    print(f"Test Error: \n F1: {(f1):>0.1f}%, Avg loss: {loss:>8f} \n")
 
+############################################
+device = torch.device("cuda:0")
 
 epochs = 30
 batch_size = 4
@@ -47,13 +47,19 @@ adam_epsilon = 1e-6
 bert_lr = 3e-5
 
 loss_fn = balanced_loss()
-training_data = DocRED("dataset/dev.json")
-train_dataloader = DataLoader(training_data, batch_size=batch_size, shuffle=True)
+loss_fn.to(device)
 
-test_data = DocRED("dataset/test.json")
+training_data = DocRED("dataset/train_annotated.json")
+train_size = int(0.8 * len(training_data))
+test_size = len(training_data) - train_size
+train_data, test_data = torch.utils.data.random_split(training_data, [train_size, test_size])
+
+
+train_dataloader = DataLoader(train_data, batch_size=batch_size, shuffle=True)
 test_dataloader = DataLoader(test_data, batch_size=batch_size, shuffle=True)
 
 model = Model()
+model.to(device)
 
 #####
 cur_model = model.module if hasattr(model, 'module') else model

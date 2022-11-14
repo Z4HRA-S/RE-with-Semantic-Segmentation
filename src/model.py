@@ -2,6 +2,7 @@ from torch import nn
 import torch
 from src.Unet import AttentionUNet
 
+device = torch.device("cuda:0")
 embd_size = 768
 
 
@@ -9,12 +10,13 @@ class Model(nn.Module):
     def __init__(self, feature_map="similarity"):
         super(Model, self).__init__()
         self.cosine_similarity = nn.CosineSimilarity(dim=1, eps=1e-6)
-        self.similarity_3 = nn.Bilinear(embd_size, embd_size, 42, bias=False)
+        self.similarity_3 = nn.Bilinear(embd_size, embd_size, 42, bias=False,device=device)
         self.feature_map = feature_map
         # self.capsule_net = CapsNet()
         self.unet = AttentionUNet(input_channels=3,
                                   class_number=256,
                                   down_channel=256)
+        self.unet.to(device)
 
     def forward(self, x):
         """
@@ -22,8 +24,9 @@ class Model(nn.Module):
                   embedded_doc, entity_list, label
         :return:
         """
-        label = x.pop("label")
+        label = x.get("label")
         entity_list = x["entity_list"]
+        entity_list.to(device)
         # calculating feature_map
         sim_1 = entity_list.matmul(entity_list.transpose(-1, -2)).unsqueeze(-1)
         sim2 = []
@@ -42,11 +45,11 @@ class Model(nn.Module):
         predict_index = [torch.argmax(vector) for vector in vector_norm]
         return predict_index"""
         attn_map = self.unet(feature_map)  # ([batch, 42, 42, 256])
-        attn_map = nn.Linear(256, 256)(attn_map)
+        attn_map = nn.Linear(256, 256, device=device)(attn_map)
 
         stacked_entity = torch.stack([torch.stack([doc] * 42) for doc in entity_list])
-        z_s = torch.tanh(nn.Linear(embd_size, 256, bias=False)(stacked_entity) + attn_map)
-        z_o = torch.tanh(nn.Linear(embd_size, 256, bias=False)(stacked_entity.transpose(1, 2)) + attn_map)
-        logits = nn.Bilinear(256, 256, 97, bias=True)(z_s, z_o)
+        z_s = torch.tanh(nn.Linear(embd_size, 256, bias=False, device = device)(stacked_entity) + attn_map)
+        z_o = torch.tanh(nn.Linear(embd_size, 256, bias=False, device = device)(stacked_entity.transpose(1, 2)) + attn_map)
+        logits = nn.Bilinear(256, 256, 97, bias=True, device = device)(z_s, z_o)
 
         return logits

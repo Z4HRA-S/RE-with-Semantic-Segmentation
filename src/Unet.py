@@ -2,6 +2,8 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch
 
+device = torch.device("cuda:0")
+
 
 class AttentionUNet(torch.nn.Module):
     """
@@ -11,7 +13,7 @@ class AttentionUNet(torch.nn.Module):
     def __init__(self, input_channels, class_number, **kwargs):
         super(AttentionUNet, self).__init__()
 
-        down_channel = kwargs['down_channel'] # default = 256
+        down_channel = kwargs['down_channel']  # default = 256
 
         down_channel_2 = down_channel * 2
         up_channel_1 = down_channel_2 * 2
@@ -33,6 +35,7 @@ class AttentionUNet(torch.nn.Module):
         """
         # attention_channels as the shape of: batch_size x channel x width x height
         x = attention_channels
+        x.to(device)
         x1 = self.inc(x)
         x2 = self.down1(x1)
         x3 = self.down2(x2)
@@ -54,7 +57,8 @@ class DoubleConv(nn.Module):
                                          nn.ReLU(inplace=True),
                                          nn.Conv2d(out_ch, out_ch, kernel_size=3, padding=1),
                                          nn.BatchNorm2d(out_ch),
-                                         nn.ReLU(inplace=True))
+                                         nn.ReLU(inplace=True),
+                                         )
 
     def forward(self, x):
         x = self.double_conv(x)

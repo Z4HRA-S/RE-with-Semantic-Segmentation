@@ -2,13 +2,12 @@ from torch.utils.data import Dataset
 import torch
 import transformers as ppb
 import json
-import numpy as np
 from typing import List, Dict
-import os
-import sys
 
 max_ent = 42
 max_lbl = 151
+
+device = torch.device("cuda:0")
 
 
 class DocRED(Dataset):
@@ -24,6 +23,7 @@ class DocRED(Dataset):
         self.tokenizer.add_special_tokens(special_tokens_dict)
         self.embedding_model = ppb.BertModel.from_pretrained("bert-base-uncased")
         self.embedding_model.resize_token_embeddings(self.get_token_embedding())
+        self.embedding_model.to(device)
 
         self.data, self.rel2id = self.__read_data__(data_path)
 
@@ -33,7 +33,6 @@ class DocRED(Dataset):
     def __read_data__(self, data_dir: "str"):
         with open(data_dir, "r") as file:
             data = json.loads(file.read())
-
         rel2id_dir = "/".join(data_dir.split("/")[:-1] + ["rel2id.json"])
         with open(rel2id_dir, "r") as file:
             rel2id = json.loads(file.read())
@@ -99,15 +98,17 @@ class DocRED(Dataset):
         doc = self.__add_special_entity_token__(doc)
         doc = self.__join_sents__(doc)
         tokenized_doc, attention_mask = self.__tokenize__(doc["sents"])
+        input_ids = torch.squeeze(tokenized_doc, 1).to(device)
+        att_mask = torch.squeeze(attention_mask, 1).to(device)
 
         embedded_doc = self.embedding_model(
-            input_ids=torch.squeeze(tokenized_doc, 1),
-            attention_mask=torch.squeeze(attention_mask, 1),
+            input_ids=input_ids,
+            attention_mask=att_mask,
             output_attentions=True)
 
         vertexSet = [[mnt["pos"] for mnt in ent] for ent in doc["vertexSet"]]
         entity_list = self.aggregate_entities(vertexSet, embedded_doc.last_hidden_state.squeeze())
-        labels = torch.zeros(42, 42, 97)
+        labels = torch.zeros(42, 42, 97).to(device)
         for triple in doc["labels"]:
             i = triple["h"]
             j = triple["t"]
@@ -115,7 +116,7 @@ class DocRED(Dataset):
             labels[i][j][k] = 1
 
         processed_doc = {
-            "entity_list": entity_list,
+            "entity_list": entity_list.to(device),
             "embedded_doc": embedded_doc,
             "label": labels
         }
@@ -127,9 +128,9 @@ class DocRED(Dataset):
         :param embedded_doc: embedded doc in shape (512, 768)
         :return: The logsumexp pooling of mentions for each entity in shape(max_entity, 768)
         """
-        logsumexp = lambda x: torch.log(torch.sum(torch.exp(x), axis=0)).detach().numpy()
+        logsumexp = lambda x: torch.log(torch.sum(torch.exp(x), axis=0)).unsqueeze(0)
         _, embedding_size = embedded_doc.size()
-        padded_result = torch.zeros(max_ent, embedding_size)
+        padded_result = torch.zeros(max_ent, embedding_size, device=device)
         mention_positions = [list(filter(lambda x: x[0] <= 512 and x[1] <= 512, ent)) for ent in vertexSet]
         mention_positions = [list(filter(lambda x: len(x) > 0, mnt)) for mnt in mention_positions]
         mention_positions = list(filter(lambda x: len(x) > 0, mention_positions))
@@ -137,7 +138,7 @@ class DocRED(Dataset):
         doc = [logsumexp(torch.concat([embedded_doc[pos[0]:pos[1]] for pos in mnt]))
                for mnt in mention_positions]
         # padding the doc to the length max_entity
-        padded_result[:len(doc)] = torch.from_numpy(np.array(doc)).to(padded_result)
+        padded_result[:len(doc)] = torch.concat(doc)
         return padded_result
 
     def __getitem__(self, idx):

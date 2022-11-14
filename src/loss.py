@@ -38,7 +38,7 @@ class balanced_loss(nn.Module):
         return loss, f1
 
     def f1(self, logits, labels):
-        predicted = torch.zeros_like(logits)
+        predicted = torch.zeros_like(logits).to(logits)
         predicted[logits > 0] = 1
         tp = torch.sum(torch.logical_and(predicted, labels).float(), dim=1)
         fn_fp = torch.sum(torch.logical_xor(predicted, labels).float(), dim=1)
