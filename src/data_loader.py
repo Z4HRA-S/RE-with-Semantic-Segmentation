@@ -66,7 +66,7 @@ class DocRED(Dataset):
                 end += shift
 
                 sent = doc["sents"][sent_id]
-                sent = sent[:start] + ["<e>"] + sent[start:end] + ["</e>"] + sent[end:]
+                sent = list(sent[:start]) + ["<e>"] + list(sent[start:end]) + ["</e>"] + list(sent[end:])
 
                 doc["sents"][sent_id] = sent
                 doc["vertexSet"][ent_idx][mnt_idx]["pos"] = [start, end + 2]
